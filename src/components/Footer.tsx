@@ -30,7 +30,7 @@ export function Footer({ gravity, onGravityToggle, onHeightChange }: FooterProps
     <footer ref={ref} className="relative z-[2] bg-bg border-t border-border mt-6 md:mt-16 lg:mt-20">
       <div className="max-w-page mx-auto px-6 md:px-8 lg:px-12 py-6">
         <nav
-          className="flex flex-wrap items-center gap-5 md:gap-8"
+          className="flex items-center gap-3 md:gap-8"
           aria-label="Social links"
         >
           {SOCIAL_LINKS.map((link) => (
