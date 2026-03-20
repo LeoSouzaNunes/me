@@ -1,12 +1,39 @@
+import { useRef } from "react";
+
 interface GravityToggleProps {
   readonly enabled: boolean;
   readonly onToggle: () => void;
 }
 
+async function requestGyroPermission() {
+  const DOE = DeviceOrientationEvent as unknown as {
+    requestPermission?: () => Promise<string>;
+  };
+  if (typeof DOE.requestPermission === "function") {
+    try {
+      const result = await DOE.requestPermission();
+      return result === "granted";
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function GravityToggle({ enabled, onToggle }: GravityToggleProps) {
+  const permissionRequested = useRef(false);
+
+  const handleClick = async () => {
+    if (!enabled && !permissionRequested.current) {
+      permissionRequested.current = true;
+      await requestGyroPermission();
+    }
+    onToggle();
+  };
+
   return (
     <button
-      onClick={onToggle}
+      onClick={handleClick}
       role="switch"
       aria-checked={enabled}
       aria-label="Toggle gravity"

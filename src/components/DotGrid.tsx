@@ -14,6 +14,8 @@ const RETURN_SPEED = 0.08;
 const SPREAD_FORCE = 0.4;
 const SLEEP_THRESHOLD = 0.1;
 const CELL_SIZE = COLLISION_RADIUS * 2;
+const GYRO_SCALE = 0.008;
+const MAX_TILT_GRAVITY = 0.35;
 
 interface Dot {
   gridX: number;
@@ -38,6 +40,8 @@ export function DotGrid({ gravity = false, floorOffset = 0 }: DotGridProps) {
   const gravityRef = useRef(gravity);
   const floorOffsetRef = useRef(floorOffset);
   const initializedRef = useRef(false);
+  const gyroRef = useRef<{ gx: number; gy: number }>({ gx: 0, gy: GRAVITY });
+  const hasGyroRef = useRef(false);
 
   gravityRef.current = gravity;
   floorOffsetRef.current = floorOffset;
@@ -76,11 +80,12 @@ export function DotGrid({ gravity = false, floorOffset = 0 }: DotGridProps) {
 
     const mouse = mouseRef.current;
     const isGravity = gravityRef.current;
-    const floor = height - floorOffsetRef.current - DOT_RADIUS;
+    const fOffset = floorOffsetRef.current;
     const dots = dotsRef.current;
+    const { gx, gy } = gyroRef.current;
 
     if (isGravity) {
-      /* Build spatial hash for collision detection */
+      /* Build spatial hash */
       const grid = new Map<string, Dot[]>();
       for (const dot of dots) {
         const cx = Math.floor(dot.x / CELL_SIZE);
@@ -94,15 +99,17 @@ export function DotGrid({ gravity = false, floorOffset = 0 }: DotGridProps) {
         }
       }
 
-      /* Apply gravity and movement */
+      /* Apply gravity (gyro-aware) and movement */
       for (const dot of dots) {
-        dot.vy += GRAVITY;
+        dot.vx += gx;
+        dot.vy += gy;
         dot.x += dot.vx;
         dot.y += dot.vy;
         dot.vx *= FRICTION;
         dot.vy *= FRICTION;
 
-        /* Floor collision */
+        /* Floor */
+        const floor = height - fOffset - DOT_RADIUS;
         if (dot.y >= floor) {
           dot.y = floor;
           if (Math.abs(dot.vy) > 1) {
@@ -111,21 +118,30 @@ export function DotGrid({ gravity = false, floorOffset = 0 }: DotGridProps) {
           dot.vy = -dot.vy * BOUNCE_DAMPING;
         }
 
-        /* Wall collision */
-        if (dot.x < DOT_RADIUS) {
-          dot.x = DOT_RADIUS;
-          dot.vx = Math.abs(dot.vx) * BOUNCE_DAMPING;
-        } else if (dot.x > width - DOT_RADIUS) {
-          dot.x = width - DOT_RADIUS;
-          dot.vx = -Math.abs(dot.vx) * BOUNCE_DAMPING;
+        /* Ceiling */
+        if (dot.y < DOT_RADIUS) {
+          dot.y = DOT_RADIUS;
+          dot.vy = -dot.vy * BOUNCE_DAMPING;
         }
 
-        /* Sleep: kill tiny velocities so dots settle */
+        /* Left wall */
+        if (dot.x < DOT_RADIUS) {
+          dot.x = DOT_RADIUS;
+          dot.vx = -dot.vx * BOUNCE_DAMPING;
+        }
+
+        /* Right wall */
+        if (dot.x > width - DOT_RADIUS) {
+          dot.x = width - DOT_RADIUS;
+          dot.vx = -dot.vx * BOUNCE_DAMPING;
+        }
+
+        /* Sleep */
         if (Math.abs(dot.vx) < SLEEP_THRESHOLD) dot.vx = 0;
         if (Math.abs(dot.vy) < SLEEP_THRESHOLD) dot.vy = 0;
       }
 
-      /* Resolve dot-dot collisions — position only, no velocity injection */
+      /* Resolve collisions */
       for (const dot of dots) {
         const cx = Math.floor(dot.x / CELL_SIZE);
         const cy = Math.floor(dot.y / CELL_SIZE);
@@ -148,7 +164,6 @@ export function DotGrid({ gravity = false, floorOffset = 0 }: DotGridProps) {
                 const ux = dx / dist;
                 const uy = dy / dist;
 
-                /* Push apart — position correction only */
                 dot.x += ux * overlap * SPREAD_FORCE;
                 dot.y += uy * overlap * SPREAD_FORCE;
                 other.x -= ux * overlap * SPREAD_FORCE;
@@ -158,7 +173,12 @@ export function DotGrid({ gravity = false, floorOffset = 0 }: DotGridProps) {
           }
         }
 
+        /* Re-clamp after collision push */
+        const floor = height - fOffset - DOT_RADIUS;
         if (dot.y > floor) dot.y = floor;
+        if (dot.y < DOT_RADIUS) dot.y = DOT_RADIUS;
+        if (dot.x < DOT_RADIUS) dot.x = DOT_RADIUS;
+        if (dot.x > width - DOT_RADIUS) dot.x = width - DOT_RADIUS;
       }
     } else {
       for (const dot of dots) {
@@ -235,10 +255,25 @@ export function DotGrid({ gravity = false, floorOffset = 0 }: DotGridProps) {
       mouseRef.current = null;
     };
 
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (!hasGyroRef.current) hasGyroRef.current = true;
+      const gamma = e.gamma ?? 0; // left/right tilt (-90 to 90)
+      const beta = e.beta ?? 0;   // front/back tilt (-180 to 180)
+
+      const clampedGamma = Math.max(-45, Math.min(45, gamma));
+      const clampedBeta = Math.max(-45, Math.min(45, beta));
+
+      gyroRef.current = {
+        gx: Math.max(-MAX_TILT_GRAVITY, Math.min(MAX_TILT_GRAVITY, clampedGamma * GYRO_SCALE)),
+        gy: Math.max(GRAVITY * 0.3, Math.min(MAX_TILT_GRAVITY + GRAVITY, GRAVITY + clampedBeta * GYRO_SCALE)),
+      };
+    };
+
     resize();
     window.addEventListener("resize", resize);
     window.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseleave", handleMouseLeave);
+    window.addEventListener("deviceorientation", handleOrientation);
 
     rafRef.current = requestAnimationFrame(draw);
 
@@ -247,6 +282,7 @@ export function DotGrid({ gravity = false, floorOffset = 0 }: DotGridProps) {
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseleave", handleMouseLeave);
+      window.removeEventListener("deviceorientation", handleOrientation);
       motionQuery.removeEventListener("change", handleMotionChange);
     };
   }, [draw, buildGrid]);
