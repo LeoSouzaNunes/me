@@ -6,6 +6,7 @@ const isSPA = process.env.BUILD_SPA === "true";
 
 export default defineConfig({
   server: { port: 3000 },
+  base: isSPA ? "/me/" : "/",
   plugins: [
     tanstackStart({
       ...(isSPA && {

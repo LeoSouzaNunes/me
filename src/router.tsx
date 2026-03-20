@@ -5,6 +5,7 @@ export function getRouter() {
   const router = createRouter({
     routeTree,
     scrollRestoration: true,
+    basepath: import.meta.env.BASE_URL,
   });
 
   return router;
