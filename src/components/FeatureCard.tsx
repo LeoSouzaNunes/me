@@ -3,18 +3,17 @@ import type { Feature } from "../types";
 
 interface FeatureCardProps {
   readonly feature: Feature;
+  readonly onSelect?: (featureId: string) => void;
 }
 
-export function FeatureCard({ feature }: FeatureCardProps) {
-  return (
-    <article
-      className={
-        feature.locked
-          ? "relative z-[2] bg-bg-surface border border-border rounded-md p-3 md:p-6 pointer-events-none select-none"
-          : "relative z-[2] bg-bg-surface border border-border rounded-md p-3 md:p-6"
-      }
-      aria-disabled={feature.locked}
-    >
+export function FeatureCard({ feature, onSelect }: FeatureCardProps) {
+  const isClickable = !feature.locked && onSelect;
+
+  const baseClass =
+    "relative z-[2] bg-bg-surface border border-border rounded-md p-3 md:p-6";
+
+  const content = (
+    <>
       <div className="flex items-center justify-between">
         <h3 className="font-dot text-lg uppercase tracking-[0.10em] leading-tight text-text-primary">
           {feature.title}
@@ -34,6 +33,31 @@ export function FeatureCard({ feature }: FeatureCardProps) {
           Coming soon
         </span>
       )}
+    </>
+  );
+
+  if (isClickable) {
+    return (
+      <button
+        onClick={() => onSelect(feature.id)}
+        className={`${baseClass} text-left w-full transition-colors duration-200 ease cursor-pointer hover:border-border-hover focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-hover`}
+        aria-label={`Open ${feature.title}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <article
+      className={
+        feature.locked
+          ? `${baseClass} pointer-events-none select-none`
+          : baseClass
+      }
+      aria-disabled={feature.locked}
+    >
+      {content}
     </article>
   );
 }
